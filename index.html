@@ -181,12 +181,25 @@
             }
             montarTelaPontos();
 
+            // texto fixo no rodapé da tela branca (fica em cima de tudo, nas duas telas do gate)
+            function montarRodape(overlay) {
+                var rod = document.createElement('div');
+                rod.style.cssText = 'position:absolute; right:16px; bottom:12px; text-align:right; pointer-events:none; font-family:\'Helvetica Neue\',Arial,sans-serif; font-weight:800; text-transform:uppercase; color:#b91c1c; font-size:2.4rem; line-height:1.2; letter-spacing:2px;';
+                rod.innerHTML = 'Lugar Comum<br>Bar';
+                overlay.appendChild(rod);
+            }
+
             // ---------- tela 1: os 16 pontos (desenha um padrão arrastando) ----------
             function montarTelaPontos() {
                 var overlay = document.createElement('div');
                 overlay.id = 'gate-overlay';
                 overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;touch-action:none;';
                 document.body.appendChild(overlay);
+                montarRodape(overlay);
+
+                // já começa a carregar o sistema por baixo (escondido atrás dessa tela branca): quando passar
+                // pelos pontos e pelo login, o sistema aparece na hora, sem esperar carregar mais nada.
+                iniciarSistemaLCB();
 
                 var tam = Math.min(320, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.8));
                 var svgNS = 'http://www.w3.org/2000/svg';
@@ -298,6 +311,7 @@
                     '<label style="display:block;font-size:0.85rem;color:#000;margin-bottom:0.75rem;"><input type="checkbox" id="gate-ver-senha" style="width:auto;display:inline-block;margin-right:0.4rem;"> Mostrar senha</label>' +
                     '<button type="button" id="gate-entrar" style="width:100%;padding:0.6rem;background:#b91c1c;color:#fff;border:none;border-radius:0.4rem;font-weight:bold;">Entrar</button>' +
                     '</div>';
+                montarRodape(overlay);
                 var campoSenha = document.getElementById('gate-senha');
                 campoSenha.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') document.getElementById('gate-entrar').click(); });
                 document.getElementById('gate-ver-senha').addEventListener('change', function () { campoSenha.type = this.checked ? 'text' : 'password'; });
@@ -1688,7 +1702,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '26/11-F';
+        var VERSAO_SITE = '26/11-H';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('service-worker.js').catch(function () {});
