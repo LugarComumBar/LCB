@@ -210,10 +210,22 @@
                     for (var i = 1; i < ativos.length; i++) linha(pontos[ativos[i - 1] - 1], pontos[ativos[i] - 1]);
                     if (pontaSolta && ativos.length) linha(pontos[ativos[ativos.length - 1] - 1], pontaSolta);
                     pontos.forEach(function (p) {
+                        var ativo = ativos.indexOf(p.id) >= 0;
                         var c = document.createElementNS(svgNS, 'circle');
                         c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', raioPonto);
-                        c.setAttribute('fill', ativos.indexOf(p.id) >= 0 ? '#b91c1c' : '#ddd');
+                        c.setAttribute('fill', ativo ? '#b91c1c' : '#ddd');
                         svg.appendChild(c);
+                        var t = document.createElementNS(svgNS, 'text');
+                        t.setAttribute('x', p.x); t.setAttribute('y', p.y);
+                        t.setAttribute('text-anchor', 'middle');
+                        t.setAttribute('dominant-baseline', 'central');
+                        t.setAttribute('font-size', raioPonto * 1.1);
+                        t.setAttribute('font-family', 'sans-serif');
+                        t.setAttribute('font-weight', 'bold');
+                        t.setAttribute('fill', ativo ? '#fff' : '#666');
+                        t.setAttribute('pointer-events', 'none');
+                        t.textContent = p.id;
+                        svg.appendChild(t);
                     });
                 }
                 desenhar([], null);
@@ -1668,7 +1680,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '25/11-A';
+        var VERSAO_SITE = '26/11-B';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('service-worker.js').catch(function () {});
