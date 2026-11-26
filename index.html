@@ -144,6 +144,165 @@
                 if (!ok) document.documentElement.className += ' sem-gap';
             } catch (e) {}
         })();
+
+        var API_URL_GATE = "https://script.google.com/macros/s/AKfycbyawZahFXeytjgTj2-yId6TIQwF7RoSqF2alHUj4AF46Huhmsl4keW4bUm6sakf8p_M/exec";
+
+        // ---------- gate de acesso ao site: pontos (padrão arrastado) + e-mail/senha, ANTES de tudo o resto ----------
+        // Tudo conferido no servidor (Apps Script): nenhuma resposta certa fica neste arquivo público.
+        // Depois de passar uma vez, fica "lembrado" neste aparelho; mesmo lembrado, confere de novo e bem rápido se o
+        // e-mail ainda está liberado na planilha, toda vez que a página abre (removeu o e-mail = aparelho barrado de novo).
+        (function () {
+            var GATE_SESSAO = 'lcb_gate1';
+            function gateLer() {
+                try { return JSON.parse(localStorage.getItem(GATE_SESSAO) || 'null'); } catch (e) { return null; }
+            }
+            function gateGravar(email) {
+                try { if (email) localStorage.setItem(GATE_SESSAO, JSON.stringify({ email: email })); else localStorage.removeItem(GATE_SESSAO); } catch (e) {}
+            }
+            function gateChamar(qs) {
+                return fetch(API_URL_GATE + '?' + qs).then(function (r) { return r.json(); }).catch(function () { return { ok: false, erroRede: true }; });
+            }
+
+            var sessaoGate = gateLer();
+            if (sessaoGate && sessaoGate.email) {
+                gateChamar('acao=gate_ainda&email=' + encodeURIComponent(sessaoGate.email)).then(function (j) {
+                    if (j && j.erroRede) { iniciarSistemaLCB(); return; } // sem internet pra checar agora: não tranca por causa disso (o login do sistema ainda protege)
+                    if (j && j.ok) iniciarSistemaLCB();
+                    else { gateGravar(''); montarTelaPontos(); }
+                });
+                return;
+            }
+            montarTelaPontos();
+
+            // ---------- tela 1: os 16 pontos (desenha um padrão arrastando) ----------
+            function montarTelaPontos() {
+                var overlay = document.createElement('div');
+                overlay.id = 'gate-overlay';
+                overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;touch-action:none;';
+                document.body.appendChild(overlay);
+
+                var tam = Math.min(320, Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.8));
+                var svgNS = 'http://www.w3.org/2000/svg';
+                var svg = document.createElementNS(svgNS, 'svg');
+                svg.setAttribute('width', tam); svg.setAttribute('height', tam);
+                svg.style.touchAction = 'none';
+                overlay.appendChild(svg);
+                var msg = document.createElement('div');
+                msg.style.cssText = 'margin-top:1.2rem;font-weight:bold;min-height:1.3em;font-family:sans-serif;color:#b91c1c;';
+                overlay.appendChild(msg);
+
+                var pontos = [];
+                var n = 4, margem = tam * 0.14, passo = (tam - 2 * margem) / (n - 1);
+                for (var i = 0; i < 16; i++) {
+                    var lin = Math.floor(i / 4), col = i % 4;
+                    pontos.push({ id: i + 1, x: margem + col * passo, y: margem + lin * passo });
+                }
+                var raioPonto = tam * 0.035, raioToque = tam * 0.09;
+
+                function linha(a, b) {
+                    var l = document.createElementNS(svgNS, 'line');
+                    l.setAttribute('x1', a.x); l.setAttribute('y1', a.y); l.setAttribute('x2', b.x); l.setAttribute('y2', b.y);
+                    l.setAttribute('stroke', '#b91c1c'); l.setAttribute('stroke-width', Math.max(2, tam * 0.012));
+                    svg.appendChild(l);
+                }
+                function desenhar(ativos, pontaSolta) {
+                    while (svg.firstChild) svg.removeChild(svg.firstChild);
+                    for (var i = 1; i < ativos.length; i++) linha(pontos[ativos[i - 1] - 1], pontos[ativos[i] - 1]);
+                    if (pontaSolta && ativos.length) linha(pontos[ativos[ativos.length - 1] - 1], pontaSolta);
+                    pontos.forEach(function (p) {
+                        var c = document.createElementNS(svgNS, 'circle');
+                        c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', raioPonto);
+                        c.setAttribute('fill', ativos.indexOf(p.id) >= 0 ? '#b91c1c' : '#ddd');
+                        svg.appendChild(c);
+                    });
+                }
+                desenhar([], null);
+
+                var ativos = [], desenhando = false, travado = false;
+                function pontoEm(x, y) {
+                    for (var i = 0; i < pontos.length; i++) {
+                        var p = pontos[i], dx = x - p.x, dy = y - p.y;
+                        if (dx * dx + dy * dy <= raioToque * raioToque) return p.id;
+                    }
+                    return null;
+                }
+                function coordLocal(ev) {
+                    var r = svg.getBoundingClientRect();
+                    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+                }
+                svg.addEventListener('pointerdown', function (ev) {
+                    if (travado) return;
+                    msg.textContent = '';
+                    var c = coordLocal(ev), id = pontoEm(c.x, c.y);
+                    ativos = id ? [id] : [];
+                    desenhando = true;
+                    desenhar(ativos, null);
+                    ev.preventDefault();
+                });
+                svg.addEventListener('pointermove', function (ev) {
+                    if (!desenhando || travado) return;
+                    var c = coordLocal(ev), id = pontoEm(c.x, c.y);
+                    if (id && ativos.indexOf(id) < 0) ativos.push(id);
+                    desenhar(ativos, c);
+                    ev.preventDefault();
+                });
+                function soltar(ev) {
+                    if (!desenhando || travado) return;
+                    desenhando = false;
+                    desenhar(ativos, null);
+                    if (ativos.length < 2) { ativos = []; desenhar(ativos, null); return; }
+                    travado = true;
+                    msg.style.color = '#666'; msg.textContent = 'Conferindo...';
+                    gateChamar('acao=gate_pontos&seq=' + ativos.join(',')).then(function (j) {
+                        travado = false;
+                        if (j && j.ok) { montarTelaLogin(); }
+                        else {
+                            msg.style.color = '#b91c1c'; msg.textContent = (j && j.erroRede) ? 'Sem conexão — tente de novo.' : 'Padrão errado. Tente de novo.';
+                            ativos = []; desenhar(ativos, null);
+                        }
+                    });
+                }
+                svg.addEventListener('pointerup', soltar);
+                svg.addEventListener('pointerleave', soltar);
+            }
+
+            // ---------- tela 2: e-mail + senha ----------
+            function montarTelaLogin() {
+                var overlay = document.getElementById('gate-overlay');
+                overlay.innerHTML = '<div style="background:#fff;max-width:22rem;width:100%;padding:1.5rem;font-family:sans-serif;box-sizing:border-box;">' +
+                    '<h3 style="margin-bottom:1rem;color:#000;">Entrar</h3>' +
+                    '<div id="gate-login-erro" style="color:#b91c1c;font-weight:bold;margin-bottom:0.5rem;min-height:1.2em;"></div>' +
+                    '<label style="font-size:0.85rem;color:#000;">E-mail:</label>' +
+                    '<input type="email" id="gate-email" autocomplete="username" style="width:100%;margin:0.25rem 0 0.75rem;padding:0.4rem;box-sizing:border-box;">' +
+                    '<label style="font-size:0.85rem;color:#000;">Senha:</label>' +
+                    '<input type="password" id="gate-senha" autocomplete="current-password" style="width:100%;margin:0.25rem 0 1rem;padding:0.4rem;box-sizing:border-box;">' +
+                    '<button type="button" id="gate-entrar" style="width:100%;padding:0.6rem;background:#b91c1c;color:#fff;border:none;border-radius:0.4rem;font-weight:bold;">Entrar</button>' +
+                    '</div>';
+                var campoSenha = document.getElementById('gate-senha');
+                campoSenha.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') document.getElementById('gate-entrar').click(); });
+                document.getElementById('gate-entrar').addEventListener('click', function () {
+                    var email = document.getElementById('gate-email').value.trim();
+                    var senha = document.getElementById('gate-senha').value.trim();
+                    var erroEl = document.getElementById('gate-login-erro');
+                    if (!email || !senha) { erroEl.textContent = 'Preencha e-mail e senha.'; return; }
+                    var btn = document.getElementById('gate-entrar');
+                    btn.disabled = true; btn.textContent = 'Entrando...';
+                    gateChamar('acao=gate_login&email=' + encodeURIComponent(email) + '&senha=' + encodeURIComponent(senha)).then(function (j) {
+                        if (j && j.ok) {
+                            gateGravar(email.toLowerCase());
+                            var ov = document.getElementById('gate-overlay');
+                            if (ov && ov.parentNode) ov.parentNode.removeChild(ov);
+                            iniciarSistemaLCB();
+                        } else {
+                            btn.disabled = false; btn.textContent = 'Entrar';
+                            erroEl.textContent = (j && j.erroRede) ? 'Sem conexão — tente de novo.' : 'E-mail ou senha incorretos.';
+                        }
+                    });
+                });
+            }
+        })();
+
+        function iniciarSistemaLCB() {
         var ESTACAO = /[?&]estacao=1/.test(location.search); // notebook do bar: imprime sozinho o que os iPads enviam
         var API_URL = "https://script.google.com/macros/s/AKfycbyawZahFXeytjgTj2-yId6TIQwF7RoSqF2alHUj4AF46Huhmsl4keW4bUm6sakf8p_M/exec";
 
@@ -3207,6 +3366,7 @@
             sincronizar();
             setInterval(function() { if (estado.sincT && Date.now() - estado.sincT < 8000) return; sincronizar(); }, 3000);   // não empilha consultas quando o servidor está lento
         }
+        } // fim de iniciarSistemaLCB
     </script>
 </body>
 </html>
