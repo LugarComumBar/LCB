@@ -31,6 +31,15 @@
         (function () {
             var fetchGate = window.fetch.bind(window);
             var GATE_SESSAO = 'lcb_gate1';
+            // mesmo identificador de aparelho usado dentro do sistema (/s): guardado 1x no navegador, serve pra
+            // contar tentativas erradas e pra bloquear/liberar esse aparelho na aba Bloqueados, igual ao sistema.
+            var DEV = (function () {
+                try {
+                    var d = localStorage.getItem('lcb_dev');
+                    if (!d) { d = Math.random().toString(36).substring(2, 6); localStorage.setItem('lcb_dev', d); }
+                    return d;
+                } catch (e) { return ''; }
+            })();
             function gateMesAtual() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); } // vira o mês = esqueceu o aparelho, pede tudo de novo
             function gateLer() {
                 try {
@@ -42,7 +51,14 @@
                 try { if (email) localStorage.setItem(GATE_SESSAO, JSON.stringify({ email: email, mes: gateMesAtual() })); else localStorage.removeItem(GATE_SESSAO); } catch (e) {}
             }
             function gateChamar(qs) {
-                return fetchGate(API_URL_GATE + '?' + qs).then(function (r) { return r.json(); }).catch(function () { return { ok: false, erroRede: true }; });
+                return fetchGate(API_URL_GATE + '?' + qs + '&dev=' + encodeURIComponent(DEV)).then(function (r) { return r.json(); }).catch(function () { return { ok: false, erroRede: true }; });
+            }
+            // mensagem padrão quando o servidor diz que esse aparelho está bloqueado (mesma regra do sistema: 5
+            // erradas = 10 min, dobrando a cada vez, até 24h; "desligado" = bloqueio permanente marcado na planilha).
+            function mensagemBloqueio_(j) {
+                if (j && j.desligado) return 'Este aparelho foi desativado. Fale com o responsável.';
+                if (j && j.bloqueado) return 'Muitas tentativas erradas. Tente de novo em ' + (j.minutos || 1) + ' min.';
+                return null;
             }
             function irProSistema() { location.href = '/s/'; }
 
@@ -161,7 +177,9 @@
                         travado = false;
                         if (j && j.ok) { montarTelaLogin(); }
                         else {
-                            msg.style.color = '#b91c1c'; msg.textContent = (j && j.erroRede) ? 'Sem conexão — tente de novo.' : 'Padrão errado. Tente de novo.';
+                            var msgBloq = mensagemBloqueio_(j);
+                            msg.style.color = '#b91c1c';
+                            msg.textContent = msgBloq || ((j && j.erroRede) ? 'Sem conexão — tente de novo.' : 'Padrão errado. Tente de novo.');
                             ativos = []; desenhar(ativos, null);
                         }
                     });
@@ -200,7 +218,8 @@
                             irProSistema();
                         } else {
                             btn.disabled = false; btn.textContent = 'Entrar';
-                            erroEl.textContent = (j && j.erroRede) ? 'Sem conexão — tente de novo.' : 'E-mail ou senha incorretos.';
+                            var msgBloq = mensagemBloqueio_(j);
+                            erroEl.textContent = msgBloq || ((j && j.erroRede) ? 'Sem conexão — tente de novo.' : (j && j.desbloqueado) ? 'Bloqueio removido. Pode tentar de novo.' : 'E-mail ou senha incorretos.');
                         }
                     });
                 });
