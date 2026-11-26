@@ -95,7 +95,7 @@
             function montarTelaPontos() {
                 var overlay = document.createElement('div');
                 overlay.id = 'gate-overlay';
-                overlay.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;touch-action:none;';
+                overlay.style.cssText = 'position:fixed;top:0;right:0;bottom:0;left:0;background:#fff;z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;touch-action:none;';
                 document.body.appendChild(overlay);
                 montarRodape(overlay);
 
@@ -120,7 +120,7 @@
                 function linha(a, b) {
                     var l = document.createElementNS(svgNS, 'line');
                     l.setAttribute('x1', a.x); l.setAttribute('y1', a.y); l.setAttribute('x2', b.x); l.setAttribute('y2', b.y);
-                    l.setAttribute('stroke', '#b91c1c'); l.setAttribute('stroke-width', Math.max(2, tam * 0.012));
+                    l.setAttribute('stroke', '#b91c1c'); l.setAttribute('pointer-events', 'none'); l.setAttribute('stroke-width', Math.max(2, tam * 0.012));
                     svg.appendChild(l);
                 }
                 function desenhar(ativos, pontaSolta) {
@@ -132,6 +132,7 @@
                         var c = document.createElementNS(svgNS, 'circle');
                         c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', raioPonto);
                         c.setAttribute('fill', ativo ? '#b91c1c' : '#ddd');
+                        c.setAttribute('pointer-events', 'none'); // o toque fica sempre no svg (que não é redesenhado), senão o iPad perde o arraste
                         svg.appendChild(c);
                         var t = document.createElementNS(svgNS, 'text');
                         t.setAttribute('x', p.x); t.setAttribute('y', p.y);
@@ -158,9 +159,13 @@
                 }
                 function coordLocal(ev) {
                     var r = svg.getBoundingClientRect();
-                    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+                    var t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]) || ev;
+                    return { x: t.clientX - r.left, y: t.clientY - r.top };
                 }
-                svg.addEventListener('pointerdown', function (ev) {
+                // iPad antigo (iOS 12) não tem "pointer events": usa toque (touch) nele
+                var temPointer = !!window.PointerEvent;
+                var EV_INI = temPointer ? 'pointerdown' : 'touchstart', EV_MOV = temPointer ? 'pointermove' : 'touchmove', EV_FIM = temPointer ? 'pointerup' : 'touchend';
+                svg.addEventListener(EV_INI, function (ev) {
                     if (travado) return;
                     msg.textContent = '';
                     var c = coordLocal(ev), id = pontoEm(c.x, c.y);
@@ -169,13 +174,14 @@
                     desenhar(ativos, null);
                     ev.preventDefault();
                 });
-                svg.addEventListener('pointermove', function (ev) {
+                var alvoMov = svg;
+                alvoMov.addEventListener(EV_MOV, function (ev) {
                     if (!desenhando || travado) return;
                     var c = coordLocal(ev), id = pontoEm(c.x, c.y);
                     if (id && ativos.indexOf(id) < 0) ativos.push(id);
                     desenhar(ativos, c);
                     ev.preventDefault();
-                });
+                }, { passive: false });
                 function soltar(ev) {
                     if (!desenhando || travado) return;
                     desenhando = false;
@@ -194,8 +200,9 @@
                         }
                     });
                 }
-                svg.addEventListener('pointerup', soltar);
-                svg.addEventListener('pointerleave', soltar);
+                alvoMov.addEventListener(EV_FIM, soltar);
+                if (temPointer) svg.addEventListener('pointerleave', soltar);
+                else svg.addEventListener('touchcancel', soltar);
             }
 
             // ---------- tela 2: e-mail + senha ----------
