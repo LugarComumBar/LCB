@@ -1474,6 +1474,16 @@
             });
             return achou;
         }
+        // se o número já está em uso, acha o mais perto livre (nos dois sentidos; empate prefere o de cima)
+        function proximoNumeroLivre(n) {
+            if (!numeroEmUso(n)) return n;
+            for (var d = 1; d <= 9999; d++) {
+                var acima = n + d, abaixo = n - d;
+                if (!numeroEmUso(acima)) return acima;
+                if (abaixo >= 1 && !numeroEmUso(abaixo)) return abaixo;
+            }
+            return null;
+        }
         // + Nova comanda (única): número da comanda + nome (opcional). Também aceita VIP e o segredo do jogo.
         function novaComanda() { novaPessoa(); }
         function confirmarNovaComanda() {
@@ -1499,7 +1509,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '23/11-P';
+        var VERSAO_SITE = '25/11-A';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('service-worker.js').catch(function () {});
@@ -1833,7 +1843,12 @@
                     estado.numComandaNova = '000';
                 } else {
                     if (!nn || nn < 1) { alert('Digite o número da comanda.'); if (cn && cn.focus) cn.focus(); return; }
-                    if (numeroEmUso(nn)) { alert('A comanda ' + nn + ' já está aberta.'); if (cn && cn.focus) cn.focus(); return; }
+                    if (numeroEmUso(nn)) {
+                        var nnLivre = proximoNumeroLivre(nn);
+                        if (nnLivre === null) { alert('A comanda ' + nn + ' já está aberta, e não achei nenhuma comanda livre por perto.'); if (cn && cn.focus) cn.focus(); return; }
+                        alert('Comanda ' + nn + ' ocupada — abrindo a comanda ' + nnLivre + '.');
+                        nn = nnLivre;
+                    }
                     estado.numComandaNova = (souTeste() ? 'T' : '') + fmtNum(nn);
                 }
             }
