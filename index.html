@@ -153,11 +153,15 @@
         // e-mail ainda está liberado na planilha, toda vez que a página abre (removeu o e-mail = aparelho barrado de novo).
         (function () {
             var GATE_SESSAO = 'lcb_gate1';
+            function gateMesAtual() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); } // vira o mês = esqueceu o aparelho, pede tudo de novo
             function gateLer() {
-                try { return JSON.parse(localStorage.getItem(GATE_SESSAO) || 'null'); } catch (e) { return null; }
+                try {
+                    var v = JSON.parse(localStorage.getItem(GATE_SESSAO) || 'null');
+                    return (v && v.email && v.mes === gateMesAtual()) ? v : null;
+                } catch (e) { return null; }
             }
             function gateGravar(email) {
-                try { if (email) localStorage.setItem(GATE_SESSAO, JSON.stringify({ email: email })); else localStorage.removeItem(GATE_SESSAO); } catch (e) {}
+                try { if (email) localStorage.setItem(GATE_SESSAO, JSON.stringify({ email: email, mes: gateMesAtual() })); else localStorage.removeItem(GATE_SESSAO); } catch (e) {}
             }
             function gateChamar(qs) {
                 return fetch(API_URL_GATE + '?' + qs).then(function (r) { return r.json(); }).catch(function () { return { ok: false, erroRede: true }; });
@@ -316,7 +320,6 @@
             }
         })();
 
-        function iniciarSistemaLCB() {
         var ESTACAO = /[?&]estacao=1/.test(location.search); // notebook do bar: imprime sozinho o que os iPads enviam
         var API_URL = "https://script.google.com/macros/s/AKfycbyawZahFXeytjgTj2-yId6TIQwF7RoSqF2alHUj4AF46Huhmsl4keW4bUm6sakf8p_M/exec";
 
@@ -1682,7 +1685,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '26/11-C';
+        var VERSAO_SITE = '26/11-E';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('service-worker.js').catch(function () {});
@@ -3370,17 +3373,18 @@
             setInterval(buscar, 3000);
         }
 
-        // Executa imediatamente e sincroniza em segundo plano
-        if (ESTACAO) {
-            if (!CHAVE) pedirChave('');
-            iniciarEstacao();
-        } else {
-            renderizar();
-            if (!CHAVE) pedirChave('');
-            sincronizar();
-            setInterval(function() { if (estado.sincT && Date.now() - estado.sincT < 8000) return; sincronizar(); }, 3000);   // não empilha consultas quando o servidor está lento
+        // Só executa depois que o gate (pontos + e-mail/senha) deixar passar (ver início do script).
+        function iniciarSistemaLCB() {
+            if (ESTACAO) {
+                if (!CHAVE) pedirChave('');
+                iniciarEstacao();
+            } else {
+                renderizar();
+                if (!CHAVE) pedirChave('');
+                sincronizar();
+                setInterval(function() { if (estado.sincT && Date.now() - estado.sincT < 8000) return; sincronizar(); }, 3000);   // não empilha consultas quando o servidor está lento
+            }
         }
-        } // fim de iniciarSistemaLCB
     </script>
 </body>
 </html>
