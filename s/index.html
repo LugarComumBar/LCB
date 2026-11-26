@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
+    <script>if (top !== self) { try { top.location = self.location; } catch (e) { document.documentElement.style.display = 'none'; } }</script>
     <script>
         // Checagem rápida (só local, sem internet) ANTES de carregar qualquer coisa desta página: se este
         // aparelho não passou pelo gate (pontos + e-mail/senha) em "/" neste mês, manda pra lá na hora, sem
@@ -1548,7 +1549,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '26/11-K';
+        var VERSAO_SITE = '26/11-L';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('/service-worker.js').catch(function () {});
