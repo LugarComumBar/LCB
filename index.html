@@ -152,6 +152,9 @@
         // Depois de passar uma vez, fica "lembrado" neste aparelho; mesmo lembrado, confere de novo e bem rápido se o
         // e-mail ainda está liberado na planilha, toda vez que a página abre (removeu o e-mail = aparelho barrado de novo).
         (function () {
+            // guarda o fetch original AGORA (ainda intacto): mais adiante no script o sistema troca o "fetch" global
+            // por uma versão que só deixa passar quem já tem login — e o gate roda ANTES de ter login nenhum.
+            var fetchGate = window.fetch.bind(window);
             var GATE_SESSAO = 'lcb_gate1';
             function gateMesAtual() { var d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); } // vira o mês = esqueceu o aparelho, pede tudo de novo
             function gateLer() {
@@ -164,7 +167,7 @@
                 try { if (email) localStorage.setItem(GATE_SESSAO, JSON.stringify({ email: email, mes: gateMesAtual() })); else localStorage.removeItem(GATE_SESSAO); } catch (e) {}
             }
             function gateChamar(qs) {
-                return fetch(API_URL_GATE + '?' + qs).then(function (r) { return r.json(); }).catch(function () { return { ok: false, erroRede: true }; });
+                return fetchGate(API_URL_GATE + '?' + qs).then(function (r) { return r.json(); }).catch(function () { return { ok: false, erroRede: true }; });
             }
 
             var sessaoGate = gateLer();
@@ -1685,7 +1688,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '26/11-E';
+        var VERSAO_SITE = '26/11-F';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('service-worker.js').catch(function () {});
