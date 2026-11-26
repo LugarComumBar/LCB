@@ -287,11 +287,13 @@
                     '<label style="font-size:0.85rem;color:#000;">E-mail:</label>' +
                     '<input type="email" id="gate-email" autocomplete="username" style="width:100%;margin:0.25rem 0 0.75rem;padding:0.4rem;box-sizing:border-box;">' +
                     '<label style="font-size:0.85rem;color:#000;">Senha:</label>' +
-                    '<input type="password" id="gate-senha" autocomplete="current-password" style="width:100%;margin:0.25rem 0 1rem;padding:0.4rem;box-sizing:border-box;">' +
+                    '<input type="password" id="gate-senha" autocomplete="current-password" style="width:100%;margin:0.25rem 0 0.4rem;padding:0.4rem;box-sizing:border-box;">' +
+                    '<label style="display:block;font-size:0.85rem;color:#000;margin-bottom:0.75rem;"><input type="checkbox" id="gate-ver-senha" style="width:auto;display:inline-block;margin-right:0.4rem;"> Mostrar senha</label>' +
                     '<button type="button" id="gate-entrar" style="width:100%;padding:0.6rem;background:#b91c1c;color:#fff;border:none;border-radius:0.4rem;font-weight:bold;">Entrar</button>' +
                     '</div>';
                 var campoSenha = document.getElementById('gate-senha');
                 campoSenha.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') document.getElementById('gate-entrar').click(); });
+                document.getElementById('gate-ver-senha').addEventListener('change', function () { campoSenha.type = this.checked ? 'text' : 'password'; });
                 document.getElementById('gate-entrar').addEventListener('click', function () {
                     var email = document.getElementById('gate-email').value.trim();
                     var senha = document.getElementById('gate-senha').value.trim();
@@ -1680,7 +1682,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '26/11-B';
+        var VERSAO_SITE = '26/11-C';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('service-worker.js').catch(function () {});
