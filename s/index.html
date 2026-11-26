@@ -1548,7 +1548,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '26/11-J';
+        var VERSAO_SITE = '26/11-K';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('/service-worker.js').catch(function () {});
@@ -2125,7 +2125,7 @@
             if (p && p.status !== 'fechado') {
                 p.statusPreparo = novoEstado;
                 var chv = chavePedido(estado.pedidosGlobais, idItem);
-                estado.overrides[chv] = { status: novoEstado, t: Date.now(), ult: 0, enviando: false, mesa: p.mesa, produto: p.produto, linha: p.linha };
+                estado.overrides[chv] = { status: novoEstado, t: Date.now(), ult: 0, enviando: false, mesa: p.mesa, produto: p.produto, linha: p.linha, pedidoEm: p.pedidoEm || '' };
                 enviarStatus(chv);
                 processarPedidos();
                 renderizar();
@@ -2138,7 +2138,8 @@
             if (!ov || ov.enviando || !ov.linha) return;
             ov.enviando = true; ov.ult = Date.now();
             var qs = '?acao=status_preparo&linha=' + encodeURIComponent(ov.linha) + '&mesa=' + encodeURIComponent(ov.mesa) +
-                '&produto=' + encodeURIComponent(ov.produto) + '&status=' + encodeURIComponent(ov.status);
+                '&produto=' + encodeURIComponent(ov.produto) + '&status=' + encodeURIComponent(ov.status) +
+                '&pedidoEm=' + encodeURIComponent(ov.pedidoEm || '');
             fetch(API_URL + qs, { keepalive: true })
                 .then(function(res) { return res.json(); })
                 .then(function(r) {
@@ -2146,7 +2147,7 @@
                     if (!(r && r.result === 'success') && !(r && r.error)) {
                         // script antigo (não conhece a ação por GET): usa o envio de antes
                         fetch(API_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-                            body: JSON.stringify({ acao: 'status_preparo', linha: ov.linha, mesa: ov.mesa, produto: ov.produto, statusPreparo: ov.status }) });
+                            body: JSON.stringify({ acao: 'status_preparo', linha: ov.linha, mesa: ov.mesa, produto: ov.produto, statusPreparo: ov.status, pedidoEm: ov.pedidoEm || '' }) });
                     }
                 })
                 .catch(function() { ov.enviando = false; });
