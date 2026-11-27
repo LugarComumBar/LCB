@@ -359,6 +359,8 @@
         var PREFIXO_PESSOA = 'Pessoa: ';
 
         estado.mesasNovas = []; // números de comanda digitados em "+ Nova comanda" que ainda não receberam pedido
+        estado.vipSaldos = { lista: [], carregando: false, erro: '', quando: '' }; // dívida atual de cada cliente VIP (aba VIP)
+        estado.pagVip = null; // janela "Receber pagamento" de um cliente VIP, enquanto aberta
 
         var CORES_STATUS = { pendente: '#f472b6', preparando: '#f97316', pronto: '#4ade80', entregue: '#facc15' };
         function corStatus(st) { return CORES_STATUS[st] || '#fff'; }
@@ -503,6 +505,18 @@
 
         // ---- modo TESTE (login Queen): pedidos marcados com [TESTE] na observação, mostrados em roxo com a etiqueta TESTE ----
         function souTeste() { return !!(estado.usuario && estado.usuario.supreme); } // papel supreme (coluna C da aba Key)
+        // obs de item de teste vem marcada "[TESTE:Nome]" (quem lançou); tira a marca pra exibir limpo pro usuário
+        function obsSemMarcaTeste(v) { return String(v || '').replace(/^\[TESTE:[^\]]*\]\s*/i, ''); }
+        // quem criou TODOS os itens de uma comanda de teste finalizada (ou supreme) pode apagá-la
+        function souDonoDoTeste(f) {
+            if (souTeste()) return true;
+            var meu = String(estado.usuario && estado.usuario.nome || '').trim().toLowerCase();
+            if (!meu || !f.itens || !f.itens.length) return false;
+            return f.itens.every(function(it) {
+                var m = /^\[TESTE:([^\]]*)\]/i.exec(String(it.obs || ''));
+                return !!m && m[1].trim().toLowerCase() === meu;
+            });
+        }
         // Comanda 000 com o nome Teste é a comanda de teste liberada para QUALQUER usuário (nunca entra no caixa nem mexe no estoque)
         function ehMesaTesteFixa(m) { return /Comanda\s*0{1,3}\s*-\s*Teste\b/i.test(String(m || '')); }
         function etiquetaTeste() { return '<b style="background:#6d28d9; color:#fff; border-radius:0.3rem; padding:0 0.4rem; font-size:0.75rem; letter-spacing:0.05em;">TESTE</b>'; }
@@ -831,6 +845,7 @@
             var btnRel = document.getElementById('btn-aba-relatorios');
             if (btnRel) btnRel.className = "btn-tab " + (aba === 'relatorios' ? 'active-logs' : '');
             if (aba === 'relatorios') { if (!(estado.usuario && (estado.usuario.admin || ehCont()))) { aba = estado.abaAtiva = 'caixa'; mudarAba('caixa'); return; } if (estado.relModoRelatorios === 'funcionarios') carregarRelatorios(); else carregarRelatoriosPeriodo(); }
+            if (aba === 'vip' && estado.usuario && (estado.usuario.admin || souTeste())) carregarSaldosVip();
 
             renderizar();
         }
@@ -1549,7 +1564,7 @@
 
         // ---------- GAME (segredo): em "+ Nova comanda" digite 1337 no número e GAME no nome ----------
         // ---------- atualização automática do aplicativo (iPad): compara a versão do site no servidor e recarrega sozinho ----------
-        var VERSAO_SITE = '26/11-L';
+        var VERSAO_SITE = '27/11-A';
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function () {
                 navigator.serviceWorker.register('/service-worker.js').catch(function () {});
@@ -1956,6 +1971,92 @@
             if (alvo) selecionarMesa(alvo.id);
         }
         function novaVipRapida() { janelaVip(); }
+        // ---------- dívida dos clientes VIP (aba VIP) e recebimento de pagamento ----------
+        function htmlSaldosVip() {
+            var S = estado.vipSaldos;
+            var corpo;
+            if (S.erro) corpo = '<p style="color:#b91c1c; font-weight:bold; padding:1rem;">' + esc(S.erro) + '</p>';
+            else if (S.carregando && !S.lista.length) corpo = '<p style="padding:1rem;">Carregando…</p>';
+            else if (!S.lista.length) corpo = '<p style="padding:1rem;">Nenhum cliente VIP com dívida em aberto.</p>';
+            else corpo = '<div style="display:flex; flex-direction:column; gap:0.5rem;">' + S.lista.map(function(s) {
+                return '<div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem; background:#fff; border:2px solid #000; border-radius:0.5rem; padding:0.5rem 0.75rem;">' +
+                    '<b>' + esc(s.chave.substring(PREFIXO_VIP.length)) + '</b>' +
+                    '<div style="display:flex; align-items:center; gap:0.75rem;"><span style="font-weight:800;">' + brl(s.total) + '</span>' +
+                    '<button type="button" data-chave="' + esc(s.chave) + '" data-devido="' + s.total + '" onclick="abrirPagamentoVip(this.getAttribute(\'data-chave\'), Number(this.getAttribute(\'data-devido\')))" style="background:#22c55e; border:2px solid #000; font-weight:700;">💰 Receber pagamento</button></div></div>';
+            }).join('') + '</div>';
+            return '<h2 style="color:#000; margin:1.5rem 0 0.5rem;">💰 Clientes VIP (dívida atual)</h2>' +
+                '<p style="color:#000; font-size:0.8rem; margin-bottom:0.75rem;">Quando um cliente paga a conta, use "Receber pagamento": o valor entra no caixa do dia de hoje.</p>' +
+                corpo;
+        }
+        function carregarSaldosVip(silencioso) {
+            var S = estado.vipSaldos;
+            if (S.carregando) return;
+            S.carregando = true; S.erro = '';
+            if (!silencioso) renderizar();
+            fetch(API_URL + '?acao=vip_saldos')
+                .then(function(res) { return res.json(); })
+                .then(function(r) {
+                    S.carregando = false;
+                    if (r && r.result === 'success') { S.lista = r.saldos || []; S.quando = agoraBR(); }
+                    else S.erro = (r && r.error) || 'Não foi possível carregar. Confira se o Codigo.gs novo está implantado.';
+                    if (estado.abaAtiva === 'vip') renderizar();
+                })
+                .catch(function() { S.carregando = false; S.erro = 'Falha de conexão.'; if (estado.abaAtiva === 'vip') renderizar(); });
+        }
+        function abrirPagamentoVip(chave, devido) {
+            var old = document.getElementById('janela-pagvip'); if (old && old.parentNode) old.parentNode.removeChild(old);
+            estado.pagVip = { chave: chave, devido: devido, valor: String(devido.toFixed(2)).replace('.', ','), forma: '', enviando: false, erro: '' };
+            var el = document.createElement('div');
+            el.id = 'janela-pagvip';
+            el.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; width:100%; height:100%; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:60; padding:1rem;';
+            document.body.appendChild(el);
+            desenharPagVip();
+        }
+        function pagVipFechar() {
+            if (estado.pagVip && estado.pagVip.enviando) return;
+            estado.pagVip = null;
+            var el = document.getElementById('janela-pagvip'); if (el && el.parentNode) el.parentNode.removeChild(el);
+        }
+        function pagVipForma(f) { if (!estado.pagVip || estado.pagVip.enviando) return; estado.pagVip.forma = f; desenharPagVip(); }
+        function pagVipValor(v) { if (estado.pagVip) estado.pagVip.valor = v; }
+        function desenharPagVip() {
+            var el = document.getElementById('janela-pagvip'), p = estado.pagVip;
+            if (!el || !p) return;
+            var nomeCliente = p.chave.substring(PREFIXO_VIP.length);
+            var formas = FORMAS_PAGAMENTO.map(function(f) {
+                var on = p.forma === f;
+                return '<button type="button" onclick="pagVipForma(\'' + f + '\')" style="flex:1; min-width:45%; margin:0.15rem; border:2px solid #000; background:' + (on ? '#22c55e' : '#fff') + '; font-weight:' + (on ? '800' : '600') + ';">' + (on ? '✔ ' : '') + f + '</button>';
+            }).join('');
+            el.innerHTML = '<div style="background:#fff; border:3px solid #000; border-radius:0.75rem; padding:1rem; width:100%; max-width:26rem; color:#000;">' +
+                '<h3 style="margin-bottom:0.5rem;">💰 Receber pagamento — ' + esc(nomeCliente) + '</h3>' +
+                '<p style="font-size:0.85rem; margin-bottom:0.6rem;">Dívida atual: <b>' + brl(p.devido) + '</b></p>' +
+                '<label style="font-size:0.8rem;">Valor recebido agora (pode ser parcial):</label>' +
+                '<input type="text" inputmode="decimal" id="pagvip-valor" value="' + esc(p.valor) + '" oninput="pagVipValor(this.value)" style="width:100%; margin:0.2rem 0 0.6rem;">' +
+                '<div style="font-weight:bold; font-size:0.85rem; margin-bottom:0.2rem;">Forma de pagamento</div>' +
+                '<div style="display:flex; flex-wrap:wrap;">' + formas + '</div>' +
+                (p.erro ? '<div style="color:#b91c1c; font-weight:700; margin-top:0.6rem;">' + esc(p.erro) + '</div>' : '') +
+                '<div style="display:flex; gap:0.5rem; margin-top:1rem;">' +
+                    '<button type="button" onclick="pagVipFechar()" style="flex:1; background:#fff; border:2px solid #000;"' + (p.enviando ? ' disabled' : '') + '>Cancelar</button>' +
+                    '<button type="button" onclick="confirmarPagamentoVip()" style="flex:1; background:#22c55e; border:2px solid #000; font-weight:800;"' + (p.enviando ? ' disabled' : '') + '>' + (p.enviando ? 'Enviando…' : '✔ Confirmar') + '</button>' +
+                '</div></div>';
+        }
+        function confirmarPagamentoVip() {
+            var p = estado.pagVip; if (!p || p.enviando) return;
+            var valorInp = document.getElementById('pagvip-valor'); if (valorInp) p.valor = valorInp.value;
+            var valorNum = parseFloat(String(p.valor || '').replace(/\./g, '').replace(',', '.'));
+            if (!(valorNum > 0)) { p.erro = 'Informe um valor válido.'; desenharPagVip(); return; }
+            if (valorNum > p.devido + 0.009) { p.erro = 'Valor maior que a dívida (' + brl(p.devido) + ').'; desenharPagVip(); return; }
+            if (!p.forma) { p.erro = 'Selecione a forma de pagamento.'; desenharPagVip(); return; }
+            p.erro = ''; p.enviando = true; desenharPagVip();
+            fetch(API_URL + '?acao=pagamento_vip&cliente=' + encodeURIComponent(p.chave) + '&valor=' + encodeURIComponent(valorNum.toFixed(2)) + '&forma=' + encodeURIComponent(p.forma))
+                .then(function(res) { return res.json(); })
+                .then(function(r) {
+                    p.enviando = false;
+                    if (r && r.result === 'success') { pagVipFechar(); carregarSaldosVip(); sincronizar(); }
+                    else { p.erro = (r && r.error) || 'Não foi possível registrar o pagamento.'; desenharPagVip(); }
+                })
+                .catch(function() { p.enviando = false; p.erro = 'Falha de conexão.'; desenharPagVip(); });
+        }
         function abrirNaCaixa(id) { mudarAba('caixa'); selecionarMesa(id); }
 
         // clicar em qualquer parte do cartão (menos nos botões/campos) abre a comanda completa no painel da direita
@@ -3091,6 +3192,7 @@
                             (ehCont() ? '' : '<button onclick="novaVipRapida()" style="background:#facc15; border:2px solid #000;">+ Nova conta VIP</button>') + '</div>' +
                         '<p style="color:#000; font-size:0.8rem; margin-bottom:0.75rem;">Contas mensais: continuam abertas de um dia para o outro e não entram no fechamento do dia.</p>' +
                         (vipsHtml ? '<div class="grid-cartoes">' + vipsHtml + '</div>' : '<p style="color:#000; font-weight:bold; padding:2rem; text-align:center;">Nenhuma comanda VIP aberta.</p>') +
+                        ((estado.usuario && (estado.usuario.admin || souTeste())) ? htmlSaldosVip() : '') +
                         '</div>' + lateralVip + '</div>';
                 } else if (estado.abaAtiva === 'logs') {
                     main.innerHTML = logsPaginaHtml();
@@ -3102,7 +3204,8 @@
                         if (ehVip(f.mesa)) { totalVipFin += f.total; }
                         else if (f.forma === 'Teste') { /* teste: não entra nos totais */ } else { totalFin += f.total; var nf = f.forma || 'Sem forma'; porForma[nf] = (porForma[nf] || 0) + f.total; }
                         var linhasF = f.itens.map(function(it) {
-                            return '<div style="display:flex; justify-content:space-between; gap:0.5rem; font-size:0.85rem;"><span>' + it.qnt + 'x ' + esc(it.produto) + (it.obs ? ' <small>(📝 ' + esc(it.obs) + ')</small>' : '') + (soHora(it.pedidoEm) ? ' <small>às ' + esc(soHora(it.pedidoEm)) + '</small>' : '') + '</span><span>' + brl(it.qnt * it.preco) + '</span></div>';
+                            var obsLimpo = obsSemMarcaTeste(it.obs);
+                            return '<div style="display:flex; justify-content:space-between; gap:0.5rem; font-size:0.85rem;"><span>' + it.qnt + 'x ' + esc(it.produto) + (obsLimpo ? ' <small>(📝 ' + esc(obsLimpo) + ')</small>' : '') + (soHora(it.pedidoEm) ? ' <small>às ' + esc(soHora(it.pedidoEm)) + '</small>' : '') + '</span><span>' + brl(it.qnt * it.preco) + '</span></div>';
                         }).join('');
                         finHtml += '<div class="mesa-card' + (f.teste || f.forma === 'Teste' ? ' teste' : '') + '" style="height:auto; gap:0.5rem; cursor:default;">' +
                             '<div style="display:flex; justify-content:space-between;"><strong>' + (ehVip(f.mesa) ? '⭐ ' : '') + esc(rotuloChave(f.mesa)) + clienteDaMesaFin(f) + '</strong>' + (f.teste || f.forma === 'Teste' ? etiquetaTeste() : '') + '<strong>' + brl(f.total) + '</strong></div>' +
@@ -3110,7 +3213,7 @@
                             '<div style="display:flex; flex-direction:column; gap:0.25rem;">' + linhasF + '</div>' +
                             '<div style="display:flex; gap:0.5rem;"><button data-k="' + esc(f.k) + '" onclick="imprimirFinalizada(this.getAttribute(\'data-k\'))" style="background:#fff; border:2px solid #000; flex:1;">🖨️ Imprimir</button>' +
                             (f.pend ? '<span style="flex:1; font-size:0.8rem; align-self:center;">⏳ gravando na planilha…</span>' : '<button data-k="' + esc(f.k) + '" onclick="pdfFinalizada(this.getAttribute(\'data-k\'))" style="background:#fff; border:2px solid #000; flex:1;">📄 PDF (Drive)</button>') +
-                            (souTeste() && !ehVip(f.mesa) && !f.pend ? '<button data-k="' + esc(f.k) + '" onclick="apagarFinalizada(this.getAttribute(\'data-k\'))" style="background:#7f1d1d; color:#fff; border:2px solid #000;">🗑️ Apagar</button>' : '') + '</div>' +
+                            ((f.teste || f.forma === 'Teste') && !ehVip(f.mesa) && !f.pend && souDonoDoTeste(f) ? '<button data-k="' + esc(f.k) + '" onclick="apagarFinalizada(this.getAttribute(\'data-k\'))" style="background:#7f1d1d; color:#fff; border:2px solid #000;">🗑️ Apagar</button>' : '') + '</div>' +
                         '</div>';
                     });
                     var papel = lerConfig('papel', '80');
